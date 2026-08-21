@@ -170,6 +170,7 @@ class TestCheckOutReturn:
         assert second.status_code == status.HTTP_409_CONFLICT
 
 
+@pytest.mark.django_db(transaction=True)
 @pytest.mark.skipif(
     connection.vendor != "postgresql",
     reason=(
