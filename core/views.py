@@ -10,6 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from .models import Asset, CheckOut, Employee
@@ -57,6 +58,15 @@ class CheckOutViewSet(
 ):
     queryset = CheckOut.objects.select_related("asset", "employee").all()
     serializer_class = CheckOutSerializer
+
+    def get_throttles(self):
+        # Only the state-mutating, invariant-protecting action (creating a
+        # check-out) gets its own tighter scoped rate; reads and returns
+        # fall back to the default user/anon throttles set globally.
+        if self.action == "create":
+            self.throttle_scope = "checkout-create"
+            return [ScopedRateThrottle()]
+        return super().get_throttles()
 
     def create(self, request, *args, **kwargs):
         payload = CheckOutCreateSerializer(data=request.data)
