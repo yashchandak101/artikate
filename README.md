@@ -9,6 +9,8 @@ built for the Artikate backend take-home assignment (Part A).
 - PostgreSQL 16
 - Redis 7 (Celery broker/result backend)
 - Celery + Celery Beat (`django-celery-beat` database scheduler)
+- Token auth + JWT (`djangorestframework-simplejwt`), rate limiting, and
+  an OpenAPI schema/Swagger UI (`drf-spectacular`)
 - Docker / docker-compose
 - pytest / pytest-django
 
@@ -29,7 +31,7 @@ PostgreSQL 16 + Redis 7 + Celery worker, not sqlite/mocks:
   /employees/{code}/summary/` (counts and mean-hold-duration match the
   underlying data), and `GET /reports/overdue/` (correctly sorted
   most-overdue-first).
-- **The full pytest suite (20 tests) passes against real Postgres,
+- **The full pytest suite (26 tests) passes against real Postgres,
   including the concurrency test** — `TestCheckOutConcurrency` fires two
   simultaneous check-out requests for the same asset via two threads and
   two separate DB connections, and confirms exactly one gets `201` and the
@@ -44,6 +46,20 @@ PostgreSQL 16 + Redis 7 + Celery worker, not sqlite/mocks:
   created, 2 already existed` — confirmed only 2 `OverdueNotice` rows exist
   in the database after both runs, proving idempotency end-to-end through
   the real queue, not just via a direct function call in a unit test.
+- **Rate limiting was fired past its limit live**: 22 rapid `POST
+  /checkouts/` requests against the same authenticated user returned `404`
+  for the first 20 (reaching business logic — unknown asset/employee) and
+  **`429 Too Many Requests`** with a `Retry-After` header for the 21st and
+  22nd, matching the configured `checkout-create` scope
+  (`20/minute`). Covered by `test_platform_features.py::TestThrottling`.
+- **JWT auth was exercised live**: obtained an access/refresh pair from
+  `POST /api/v1/auth/token/` and successfully called `GET /assets/` using
+  `Authorization: Bearer <access>` — a second, stateless alternative to
+  token auth, working side-by-side with it.
+- **The OpenAPI schema and docs UI were fetched live**: `GET
+  /api/v1/schema/` returns a valid `openapi: 3.0.3` document listing every
+  endpoint (verified `/checkouts/` and `/reports/overdue/` are present),
+  and `GET /api/v1/docs/` (Swagger UI) returns `200`.
 
 ## Quick start (Docker — recommended)
 
@@ -65,13 +81,11 @@ hourly schedule.
 
 ### Authenticating requests
 
-Every endpoint except `/api/v1/health/` requires auth. This project uses
-DRF's built-in **TokenAuthentication** (simplest to demo end-to-end without
-extra infra). Session auth also works if you're browsing via `/admin/` login
-in the same browser.
+Every endpoint except `/api/v1/health/` requires auth. Two schemes are
+supported side-by-side:
 
+**Option 1 — Token auth** (simplest to demo, no expiry to manage):
 ```bash
-# create a user + token
 docker compose exec web python manage.py createsuperuser
 docker compose exec web python manage.py shell -c \
   "from django.contrib.auth import get_user_model; from rest_framework.authtoken.models import Token; \
@@ -79,6 +93,41 @@ docker compose exec web python manage.py shell -c \
 
 curl -H "Authorization: Token <the-key>" http://localhost:8000/api/v1/assets/
 ```
+
+**Option 2 — JWT** (`djangorestframework-simplejwt`), for clients that would
+rather not manage a long-lived static token:
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"username": "<user>", "password": "<pass>"}' \
+  http://localhost:8000/api/v1/auth/token/
+# -> {"access": "...", "refresh": "..."}
+
+curl -H "Authorization: Bearer <access>" http://localhost:8000/api/v1/assets/
+
+# refresh when the access token expires (1 hour):
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"refresh": "<refresh>"}' \
+  http://localhost:8000/api/v1/auth/token/refresh/
+```
+
+Session auth also works if you're browsing via `/admin/` login in the same
+browser.
+
+### API documentation
+
+Interactive Swagger UI is served at `/api/v1/docs/`, backed by a live
+OpenAPI 3.0 schema at `/api/v1/schema/` (via `drf-spectacular`) — generated
+directly from the serializers/viewsets, so it can't drift from the actual
+code the way a hand-written spec can.
+
+### Rate limiting
+
+All endpoints are throttled (`rest_framework.throttling`): `300/minute` per
+authenticated user and `30/minute` for anonymous requests by default.
+`POST /checkouts/` (the one endpoint that protects a real business
+invariant — the check-out limits) has its own tighter scoped limit of
+`20/minute` per user, returning `429 Too Many Requests` with a
+`Retry-After` header once exceeded.
 
 ## Quick start (without Docker, sqlite, for fast local iteration)
 
@@ -119,16 +168,24 @@ All under `/api/v1/`:
 | `GET /employees/{employee_code}/summary/` | 4 aggregated numbers, one query |
 | `GET /reports/overdue/` | Open, overdue check-outs, most overdue first |
 | `GET /health/` | Unauthenticated; reports DB connectivity |
+| `POST /auth/token/` | Obtain a JWT access/refresh pair (alternative to token auth) |
+| `POST /auth/token/refresh/` | Refresh an expired JWT access token |
+| `GET /schema/` | OpenAPI 3.0 schema (JSON/YAML) |
+| `GET /docs/` | Interactive Swagger UI |
 
 ## Assumptions
 
 These are the judgement calls made where the spec left room, per the
 assignment's own instruction to document rather than block on them:
 
-1. **Auth scheme**: DRF TokenAuthentication (+ SessionAuthentication for
-   `/admin/` convenience). Chosen over JWT because the assignment is
-   internal-tool-shaped (no third-party clients, no refresh-token need) and
-   token auth is the least ceremony to demo in a 6–8 minute recording.
+1. **Auth scheme**: DRF TokenAuthentication as the primary scheme (+
+   SessionAuthentication for `/admin/` convenience) — chosen because the
+   assignment is internal-tool-shaped and it's the least ceremony to demo
+   in a 6–8 minute recording. JWT (`djangorestframework-simplejwt`) is
+   additionally wired up and working (`/api/v1/auth/token/` +
+   `/refresh/`) as a second, stateless option for any client that would
+   rather not manage a static long-lived token — both schemes are checked
+   on every request, so either credential type works interchangeably.
 2. **`due_at` validation is checked against wall-clock time at the moment of
    the request** (`due_at > now` and `due_at <= now + 30 days`), not against
    `checked_out_at` (which is set by `auto_now_add` to the same instant in
@@ -164,20 +221,15 @@ assignment's own instruction to document rather than block on them:
 
 Documented honestly rather than hidden, per the assignment's instructions:
 
-1. **No JWT / refresh-token flow** — token auth only, per Assumption 1.
-2. **No rate limiting / throttling** on the API — out of scope for the
-   assignment but worth flagging for a real internal tool.
-3. **No OpenAPI schema** (drf-spectacular etc.) generated — the endpoint
-   table above is the closest thing to a spec.
-4. **Screen recording**: link goes here once recorded —
-   `<ADD LOOM/RECORDING LINK HERE>`.
+1. **Screen recording**: still needs to be recorded — this is the one
+   remaining item that genuinely requires a human at a keyboard/camera; it
+   can't be produced as part of building the repo. Link goes here once
+   recorded: `<ADD LOOM/RECORDING LINK HERE>`.
 
-(The one gap that used to be listed here — being unable to verify the
-concurrency test locally — has since been closed: Postgres and Redis were
-installed and run for real, and the full suite including
-`TestCheckOutConcurrency` and a live Celery-worker dispatch of
-`flag_overdue_checkouts` were both verified end-to-end. See "Verified
-end-to-end" above.)
+Everything else previously listed here — the concurrency test being
+unverified locally, no JWT, no rate limiting, no OpenAPI schema — has since
+been closed and verified live (not just unit-tested): see "Verified
+end-to-end" above for exactly what was run and what it returned.
 
 ## Commit history
 
