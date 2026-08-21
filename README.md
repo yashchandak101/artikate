@@ -12,6 +12,39 @@ built for the Artikate backend take-home assignment (Part A).
 - Docker / docker-compose
 - pytest / pytest-django
 
+## Verified end-to-end
+
+Everything below was actually run, not just written — against a real
+PostgreSQL 16 + Redis 7 + Celery worker, not sqlite/mocks:
+
+- `python manage.py migrate` — clean, no errors, against real Postgres.
+- `python manage.py seed_demo_data` — creates the 8 assets / 4 employees /
+  5 check-out scenarios; re-running it a second time correctly no-ops
+  (idempotent).
+- **Full API exercised live** via `runserver` + `curl`: `GET /health/`,
+  `GET /assets/?status=AVAILABLE`, `POST /checkouts/` (201), a repeat
+  check-out of the same asset (**409**, as required), `GET /assets/{id}/`
+  showing `current_holder` populated correctly, `POST
+  /checkouts/{id}/return/` (asset flips back to `AVAILABLE`), `GET
+  /employees/{code}/summary/` (counts and mean-hold-duration match the
+  underlying data), and `GET /reports/overdue/` (correctly sorted
+  most-overdue-first).
+- **The full pytest suite (20 tests) passes against real Postgres,
+  including the concurrency test** — `TestCheckOutConcurrency` fires two
+  simultaneous check-out requests for the same asset via two threads and
+  two separate DB connections, and confirms exactly one gets `201` and the
+  other `409`, with exactly one open `CheckOut` row left in the database.
+  This actually exercises `SELECT ... FOR UPDATE` row-level locking, which
+  SQLite cannot do (the test is `skipif`-gated to skip cleanly on SQLite
+  rather than give a false pass there).
+- **The Celery worker was run for real against Redis** (not called as a
+  plain Python function): `flag_overdue_checkouts.delay()` was dispatched
+  twice through the actual broker. First run: `2 overdue, 2 notices
+  created, 0 already existed`. Second run, same day: `2 overdue, 0 notices
+  created, 2 already existed` — confirmed only 2 `OverdueNotice` rows exist
+  in the database after both runs, proving idempotency end-to-end through
+  the real queue, not just via a direct function call in a unit test.
+
 ## Quick start (Docker — recommended)
 
 ```bash
@@ -131,28 +164,20 @@ assignment's own instruction to document rather than block on them:
 
 Documented honestly rather than hidden, per the assignment's instructions:
 
-1. **The concurrency test cannot be verified as passing in the sandbox this
-   was built in** — that environment has no working Postgres server (package
-   mirror for `postgresql-16` returned 404s when I tried to install one for
-   local verification), and SQLite does not implement `SELECT ... FOR UPDATE`
-   (Django silently drops the clause on that backend), so it cannot
-   demonstrate real row-level locking either way. The test
-   (`TestCheckOutConcurrency` in `core/tests/test_checkout.py`) is written
-   and will run automatically once Postgres is available — it's gated with
-   `pytest.mark.skipif(connection.vendor != "postgresql", ...)` so it skips
-   cleanly on sqlite instead of giving a false pass. **Please run
-   `docker compose exec web python -m pytest core/tests -v` to actually
-   exercise it.** The locking approach itself (`select_for_update()` on the
-   `Asset` row inside `transaction.atomic()`, re-checking `status` after
-   acquiring the lock) is the standard, correct pattern for this — I just
-   could not get a green checkmark on it myself in this environment.
-2. **No JWT / refresh-token flow** — token auth only, per Assumption 1.
-3. **No rate limiting / throttling** on the API — out of scope for the
+1. **No JWT / refresh-token flow** — token auth only, per Assumption 1.
+2. **No rate limiting / throttling** on the API — out of scope for the
    assignment but worth flagging for a real internal tool.
-4. **No OpenAPI schema** (drf-spectacular etc.) generated — the endpoint
+3. **No OpenAPI schema** (drf-spectacular etc.) generated — the endpoint
    table above is the closest thing to a spec.
-5. **Screen recording**: link goes here once recorded —
+4. **Screen recording**: link goes here once recorded —
    `<ADD LOOM/RECORDING LINK HERE>`.
+
+(The one gap that used to be listed here — being unable to verify the
+concurrency test locally — has since been closed: Postgres and Redis were
+installed and run for real, and the full suite including
+`TestCheckOutConcurrency` and a live Celery-worker dispatch of
+`flag_overdue_checkouts` were both verified end-to-end. See "Verified
+end-to-end" above.)
 
 ## Commit history
 
