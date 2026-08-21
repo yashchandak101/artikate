@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "rest_framework.authtoken",
     "django_filters",
     "django_celery_beat",
+    "drf_spectacular",
     "core",
 ]
 
@@ -98,6 +99,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
@@ -109,6 +111,49 @@ REST_FRAMEWORK = {
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.UserRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        # General ceiling for any authenticated user across the whole API.
+        "user": "300/minute",
+        # Unauthenticated requests only ever hit /health/, but throttle
+        # them too in case that changes.
+        "anon": "30/minute",
+        # Check-out creation is the one endpoint with a real invariant to
+        # protect (the 3-open-checkouts / single-open-per-asset rules) and
+        # is the most likely target of an accidental retry storm or a
+        # scripted abuse pattern, so it gets its own tighter, named scope
+        # rather than relying on the general "user" rate alone.
+        "checkout-create": "20/minute",
+    },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Artikate Field Asset Check-Out Service API",
+    "DESCRIPTION": (
+        "Internal REST API for tracking physical equipment checked out to "
+        "and returned by employees."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+# --- JWT (djangorestframework-simplejwt) --------------------------------
+# Token auth (above) remains the primary, simplest-to-demo auth method for
+# this internal tool (see README "Assumptions"). JWT is offered as an
+# alternative for any client that would rather not manage a long-lived
+# static token — obtain a pair at /api/v1/auth/token/ and refresh at
+# /api/v1/auth/token/refresh/.
+from datetime import timedelta as _timedelta  # noqa: E402
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": _timedelta(hours=1),
+    "REFRESH_TOKEN_LIFETIME": _timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
 }
 
 # --- Celery ---------------------------------------------------------------
