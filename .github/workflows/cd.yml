@@ -49,7 +49,7 @@ jobs:
       # is a concrete, addressable artifact rather than a hope that the
       # registry still has an older layer cached somewhere.
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
