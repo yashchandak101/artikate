@@ -1,0 +1,8 @@
+# A bad migration is the one class of change that can't be undone just by
+# redeploying the previous application image (see ANSWERS.md Part D3), so
+# anything touching migrations gets a required reviewer rather than
+# relying on general review discipline. Replace @your-github-username
+# with the actual reviewer/team once this repo has real collaborators —
+# GitHub only enforces CODEOWNERS review when "Require review from Code
+# Owners" is turned on for the branch protection rule on `main`.
+/core/migrations/ @your-github-username
