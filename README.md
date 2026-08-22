@@ -60,6 +60,17 @@ PostgreSQL 16 + Redis 7 + Celery worker, not sqlite/mocks:
   /api/v1/schema/` returns a valid `openapi: 3.0.3` document listing every
   endpoint (verified `/checkouts/` and `/reports/overdue/` are present),
   and `GET /api/v1/docs/` (Swagger UI) returns `200`.
+- **CI/CD workflows validated for real**: `actionlint` run against both
+  `.github/workflows/*.yml` (zero findings, one real bug caught and fixed
+  — a job referencing another job's output without declaring it as a
+  dependency), `hadolint` run against the `Dockerfile` (zero findings
+  after fixing an unpinned-package-version warning), and the `test` job's
+  exact command sequence (env vars, `migrate`, `pytest`) executed locally
+  against real Postgres/Redis with the same 26/26 pass result the
+  workflow would produce. `ruff`/`black`/`isort` were also run against the
+  whole codebase and every finding fixed before wiring them into CI, so
+  the pipeline is green from its first real run rather than immediately
+  red.
 
 ## Quick start (Docker — recommended)
 
@@ -129,6 +140,60 @@ invariant — the check-out limits) has its own tighter scoped limit of
 `20/minute` per user, returning `429 Too Many Requests` with a
 `Retry-After` header once exceeded.
 
+## CI/CD
+
+Two GitHub Actions workflows implement the pipeline described in
+`ANSWERS.md` Part D3 as running code, not just prose:
+
+**`.github/workflows/ci.yml`** — runs on every PR into `main` and every
+push to `main`:
+- `lint` — `ruff check .`, `black --check .`, `isort --check .`
+- `test` — real `postgres:16` and `redis:7` **service containers** (not
+  sqlite), then `manage.py check`, `makemigrations --check --dry-run`
+  (fails the build if a model change wasn't migrated), `migrate`, and the
+  full pytest suite — including the concurrency test, which only means
+  anything against a real Postgres service.
+- `docker-build` — builds the image (no push) purely to catch Dockerfile
+  drift before it reaches main.
+
+**`.github/workflows/cd.yml`** — triggered by the CI workflow *completing
+successfully* on `main` (via `workflow_run`, not an independent trigger),
+so a push that fails CI can structurally never reach this pipeline:
+- `build-and-push` — builds the image and pushes it to GHCR tagged with
+  both the git SHA and `:latest`, so a rollback is always a concrete,
+  addressable image, not a hope that an old layer is still cached
+  somewhere.
+- `migrate` — a discrete, separate step that runs migrations *before* any
+  instance is updated, gated behind a GitHub **Environment** named
+  `production` (configure required reviewers on it under repo Settings →
+  Environments for a manual approval gate here).
+- `deploy` — rolls the new image out, then polls `/api/v1/health/` and
+  fails the deploy if it never comes back healthy.
+
+**Both workflows were validated with `actionlint` (zero findings) and the
+`test` job's exact command sequence — env vars, migrate, pytest — was run
+locally against real Postgres/Redis and passed (26/26)**, not just written
+and assumed correct.
+
+**What isn't (and can't be) verified without a real target**: the
+`migrate`/`deploy` steps in `cd.yml` SSH into a host defined by
+`PRODUCTION_SSH_HOST`/`_SSH_USER`/`_SSH_KEY` repo secrets — until those
+secrets exist, both steps print a warning and exit cleanly rather than
+fail, which is intentional (a CD pipeline with no deploy target configured
+yet shouldn't be a permanently red build), but it also means the actual
+SSH/deploy commands have not been executed against a real server. Swap
+that block for an `aws ecs run-task`/`update-service` pair if deploying to
+ECS instead of a single EC2 host.
+
+Also present:
+- **`.github/CODEOWNERS`** — requires a specific reviewer on any PR
+  touching `core/migrations/`, implementing the D3 answer's "a bad
+  migration can't be undone by redeploying old code, so it gets a required
+  reviewer" as an actual enforced GitHub rule (once branch protection has
+  "Require review from Code Owners" turned on).
+- **`.github/dependabot.yml`** — weekly update PRs for pip, Docker base
+  images, and the GitHub Actions themselves.
+
 ## Quick start (without Docker, sqlite, for fast local iteration)
 
 This is **not** how the concurrency guarantee should be evaluated (see
@@ -137,7 +202,7 @@ of the test suite without standing up Postgres/Redis.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt   # includes requirements.txt + lint tools
 
 USE_SQLITE=1 python manage.py migrate
 USE_SQLITE=1 python manage.py seed_demo_data
@@ -225,11 +290,21 @@ Documented honestly rather than hidden, per the assignment's instructions:
    remaining item that genuinely requires a human at a keyboard/camera; it
    can't be produced as part of building the repo. Link goes here once
    recorded: `<ADD LOOM/RECORDING LINK HERE>`.
+2. **The CD workflow's actual deploy target isn't configured** — the
+   `migrate`/`deploy` jobs in `.github/workflows/cd.yml` need
+   `PRODUCTION_SSH_HOST`/`_SSH_USER`/`_SSH_KEY` repo secrets and a
+   `production` GitHub Environment (with required reviewers, for the
+   approval gate) before they do anything beyond printing a warning and
+   exiting cleanly. The pipeline logic itself is validated (`actionlint`,
+   and the CI job's real command sequence run locally); what's not
+   verified is an actual SSH round-trip to a real server, since none
+   exists yet. See the "CI/CD" section above.
 
 Everything else previously listed here — the concurrency test being
-unverified locally, no JWT, no rate limiting, no OpenAPI schema — has since
-been closed and verified live (not just unit-tested): see "Verified
-end-to-end" above for exactly what was run and what it returned.
+unverified locally, no JWT, no rate limiting, no OpenAPI schema, no CI —
+has since been closed and verified live (not just unit-tested): see
+"Verified end-to-end" above for exactly what was run and what it
+returned.
 
 ## Commit history
 

@@ -541,6 +541,15 @@ until the data says otherwise, and check in this order:
 
 ### D3. CI/CD and safety
 
+> **This is implemented, not just described** — see
+> `.github/workflows/ci.yml` and `.github/workflows/cd.yml`, plus
+> `.github/CODEOWNERS` and `.github/dependabot.yml`. Both workflows pass
+> `actionlint` with zero findings and the `test` job's exact command
+> sequence has been run locally against real Postgres/Redis with the same
+> result it would produce in Actions (26/26). See the README "CI/CD"
+> section for what each job does and what's still unconfigured (the real
+> deploy target's secrets).
+
 **On pull request:** lint/format checks (ruff/flake8, black --check,
 isort --check); the full pytest suite run against real Postgres and Redis
 service containers in GitHub Actions (`services:`), not sqlite, so
