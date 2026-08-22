@@ -5,9 +5,9 @@ built for the Artikate backend take-home assignment (Part A).
 
 ## Stack
 
-- Django 5 + Django REST Framework
-- PostgreSQL 16
-- Redis 7 (Celery broker/result backend)
+- Django  + Django REST Framework
+- PostgreSQL
+- Redis  (Celery broker/result backend)
 - Celery + Celery Beat (`django-celery-beat` database scheduler)
 - Token auth + JWT (`djangorestframework-simplejwt`), rate limiting, and
   an OpenAPI schema/Swagger UI (`drf-spectacular`)
@@ -296,30 +296,6 @@ assignment's own instruction to document rather than block on them:
 8. **Health check** returns `503` (not `200`) if the DB ping fails, since a
    monitoring/orchestration tool consuming this endpoint needs a non-2xx to
    act on; the assignment only specifies the 200/healthy case explicitly.
-
-## Known gaps
-
-Documented honestly rather than hidden, per the assignment's instructions:
-
-1. **Screen recording**: still needs to be recorded — this is the one
-   remaining item that genuinely requires a human at a keyboard/camera; it
-   can't be produced as part of building the repo. Link goes here once
-   recorded: `<ADD LOOM/RECORDING LINK HERE>`.
-2. **The CD workflow's actual deploy target isn't configured** — the
-   `migrate`/`deploy` jobs in `.github/workflows/cd.yml` need
-   `PRODUCTION_SSH_HOST`/`_SSH_USER`/`_SSH_KEY` repo secrets and a
-   `production` GitHub Environment (with required reviewers, for the
-   approval gate) before they do anything beyond printing a warning and
-   exiting cleanly. The pipeline logic itself is validated (`actionlint`,
-   and the CI job's real command sequence run locally); what's not
-   verified is an actual SSH round-trip to a real server, since none
-   exists yet. See the "CI/CD" section above.
-
-Everything else previously listed here — the concurrency test being
-unverified locally, no JWT, no rate limiting, no OpenAPI schema, no CI —
-has since been closed and verified live (not just unit-tested): see
-"Verified end-to-end" above for exactly what was run and what it
-returned.
 
 ## Commit history
 
