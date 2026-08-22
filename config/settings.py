@@ -164,6 +164,13 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Silences a real CPendingDeprecationWarning from Celery 5.4 (confirmed by
+# actually running the worker): from Celery 6.0, broker_connection_retry
+# will stop implicitly covering startup retries, so this makes the
+# existing "retry connecting to the broker on startup" behavior explicit
+# rather than implicit, avoiding a startup warning today and a silent
+# behavior change later.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 CELERY_BEAT_SCHEDULE = {
     "flag-overdue-checkouts-hourly": {
@@ -178,3 +185,22 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# --- Production hardening --------------------------------------------------
+# `python manage.py check --deploy` flags SECURE_SSL_REDIRECT/HSTS/secure-cookie
+# settings if they're left off. They're gated behind an explicit env var
+# (rather than just "not DEBUG") because this same settings module also
+# backs a local docker-compose demo that talks plain HTTP with no TLS
+# termination in front of it — forcing SECURE_SSL_REDIRECT=True there would
+# turn every local request into a redirect loop, breaking the exact
+# `curl http://localhost:8000/...` workflow this README walks through.
+# In a real deployment sitting behind a TLS-terminating proxy/load balancer
+# (see the AWS guide's Caddy/ALB options), set DJANGO_ENFORCE_HTTPS=1.
+ENFORCE_HTTPS = os.environ.get("DJANGO_ENFORCE_HTTPS", "0") == "1"
+if ENFORCE_HTTPS:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 365  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
