@@ -118,7 +118,7 @@ jobs:
       # failing test, and it's easy for the Dockerfile to silently rot
       # once everyone's local workflow stops touching it directly).
       - name: Build image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
