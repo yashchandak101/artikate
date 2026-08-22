@@ -19,6 +19,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as a non-root user in every service that uses this image (web,
+# worker, beat — see docker-compose.yml), not just for its own sake but
+# because Celery's worker prints a SecurityWarning and refuses to be quiet
+# about it when started as root/superuser (confirmed by actually running
+# it) — this is the real fix, not a suppressed flag.
+RUN useradd --create-home --uid 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
