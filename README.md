@@ -71,6 +71,21 @@ PostgreSQL 16 + Redis 7 + Celery worker, not sqlite/mocks:
   whole codebase and every finding fixed before wiring them into CI, so
   the pipeline is green from its first real run rather than immediately
   red.
+- **Zero warnings, anywhere, verified by actually running everything and
+  looking**: `python manage.py spectacular` went from 1 warning + 12
+  errors down to a completely silent run (fixed by adding
+  `@extend_schema`/`@extend_schema_field` to the three plain `APIView`s
+  and the `current_holder` method field, plus resolving an enum-naming
+  collision). The Celery worker's startup log went from two warnings
+  (a `CPendingDeprecationWarning` about broker-retry config, and a
+  `SecurityWarning` about running as root) to completely clean — verified
+  by actually starting the worker as a non-root user after adding one to
+  the Dockerfile. `python manage.py check --deploy` goes from 6 security
+  warnings to `0 issues` when given a real production-shaped environment
+  (`DEBUG=0`, `DJANGO_ENFORCE_HTTPS=1`, a strong generated secret key) —
+  verified directly, not assumed. The full test suite was re-run with
+  `python -W always` (forces every Python warning to print) and stayed
+  completely silent.
 
 ## Quick start (Docker — recommended)
 
