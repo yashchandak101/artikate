@@ -55,9 +55,7 @@ class Command(BaseCommand):
             )
             employees[code] = employee
             self.stdout.write(
-                self.style.SUCCESS(
-                    f"Employee {code}: {'created' if created else 'already exists'}"
-                )
+                self.style.SUCCESS(f"Employee {code}: {'created' if created else 'already exists'}")
             )
 
         # (asset_tag, employee_code, checked_out_days_ago, due_days_ago (negative = future),
@@ -76,19 +74,33 @@ class Command(BaseCommand):
             ("AST-007", "EMP-002", 25, 15, 10, False, "SEED: late-1"),
         ]
 
-        for tag, code, out_days_ago, due_days_ago, returned_days_ago, needs_maint, marker in scenarios:
+        for (
+            tag,
+            code,
+            out_days_ago,
+            due_days_ago,
+            returned_days_ago,
+            needs_maint,
+            marker,
+        ) in scenarios:
             existing = CheckOut.objects.filter(
                 asset=assets[tag], employee=employees[code], condition_note=marker
             ).first()
             if existing:
-                self.stdout.write(self.style.WARNING(f"Checkout '{marker}' already exists, skipping"))
+                self.stdout.write(
+                    self.style.WARNING(f"Checkout '{marker}' already exists, skipping")
+                )
                 continue
 
             checked_out_at = now - timedelta(days=out_days_ago)
-            due_at = now - timedelta(days=due_days_ago) if due_days_ago >= 0 else now + timedelta(
-                days=-due_days_ago
+            due_at = (
+                now - timedelta(days=due_days_ago)
+                if due_days_ago >= 0
+                else now + timedelta(days=-due_days_ago)
             )
-            returned_at = now - timedelta(days=returned_days_ago) if returned_days_ago is not None else None
+            returned_at = (
+                now - timedelta(days=returned_days_ago) if returned_days_ago is not None else None
+            )
 
             checkout = CheckOut.objects.create(
                 asset=assets[tag],

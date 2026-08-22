@@ -3,13 +3,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from .views import (
-    AssetViewSet,
-    CheckOutViewSet,
-    EmployeeSummaryView,
-    HealthView,
-    OverdueReportView,
-)
+from .views import AssetViewSet, CheckOutViewSet, EmployeeSummaryView, HealthView, OverdueReportView
 
 router = DefaultRouter()
 router.register("assets", AssetViewSet, basename="asset")

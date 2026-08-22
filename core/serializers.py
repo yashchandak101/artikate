@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Asset, CheckOut, Employee, OverdueNotice
+from .models import Asset, CheckOut, Employee
 
 
 class AssetSerializer(serializers.ModelSerializer):
@@ -35,9 +35,9 @@ class AssetDetailSerializer(AssetSerializer):
         # common "available" case.
         if obj.status != Asset.Status.CHECKED_OUT:
             return None
-        open_checkout = obj.checkouts.filter(returned_at__isnull=True).select_related(
-            "employee"
-        ).first()
+        open_checkout = (
+            obj.checkouts.filter(returned_at__isnull=True).select_related("employee").first()
+        )
         if not open_checkout:
             return None
         return CurrentHolderSerializer(

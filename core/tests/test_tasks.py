@@ -20,7 +20,9 @@ class TestFlagOverdueCheckoutsTask:
         )
 
         not_overdue_asset = make_asset(tag="AST-501", status=Asset.Status.CHECKED_OUT)
-        CheckOut.objects.create(asset=not_overdue_asset, employee=employee, due_at=now + timedelta(days=2))
+        CheckOut.objects.create(
+            asset=not_overdue_asset, employee=employee, due_at=now + timedelta(days=2)
+        )
 
         result = flag_overdue_checkouts()
 

@@ -50,7 +50,9 @@ class TestEmployeeSummary:
         resp = auth_client.get("/api/v1/employees/NOPE/summary/")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_summary_no_returned_checkouts_gives_null_mean(self, auth_client, make_asset, make_employee):
+    def test_summary_no_returned_checkouts_gives_null_mean(
+        self, auth_client, make_asset, make_employee
+    ):
         employee = make_employee(code="EMP-301")
         asset = make_asset(tag="AST-304", status=Asset.Status.CHECKED_OUT)
         CheckOut.objects.create(

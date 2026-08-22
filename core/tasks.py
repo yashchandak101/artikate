@@ -24,9 +24,9 @@ def flag_overdue_checkouts():
     now = timezone.now()
 
     overdue_checkout_ids = list(
-        CheckOut.objects.filter(
-            returned_at__isnull=True, due_at__lt=now
-        ).values_list("id", flat=True)
+        CheckOut.objects.filter(returned_at__isnull=True, due_at__lt=now).values_list(
+            "id", flat=True
+        )
     )
 
     created = 0

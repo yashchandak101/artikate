@@ -3,11 +3,10 @@ from datetime import timedelta
 
 import pytest
 from django.db import connection
-from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 
-from core.models import Asset, CheckOut, Employee
+from core.models import Asset, CheckOut
 
 pytestmark = pytest.mark.django_db
 
@@ -23,7 +22,11 @@ class TestCheckOutCreate:
 
         resp = auth_client.post(
             "/api/v1/checkouts/",
-            {"asset_tag": asset.asset_tag, "employee_code": employee.employee_code, "due_at": due_at()},
+            {
+                "asset_tag": asset.asset_tag,
+                "employee_code": employee.employee_code,
+                "due_at": due_at(),
+            },
             format="json",
         )
 
@@ -37,7 +40,11 @@ class TestCheckOutCreate:
 
         resp = auth_client.post(
             "/api/v1/checkouts/",
-            {"asset_tag": asset.asset_tag, "employee_code": employee.employee_code, "due_at": due_at()},
+            {
+                "asset_tag": asset.asset_tag,
+                "employee_code": employee.employee_code,
+                "due_at": due_at(),
+            },
             format="json",
         )
         assert resp.status_code == status.HTTP_409_CONFLICT
@@ -48,7 +55,11 @@ class TestCheckOutCreate:
 
         resp = auth_client.post(
             "/api/v1/checkouts/",
-            {"asset_tag": asset.asset_tag, "employee_code": employee.employee_code, "due_at": due_at()},
+            {
+                "asset_tag": asset.asset_tag,
+                "employee_code": employee.employee_code,
+                "due_at": due_at(),
+            },
             format="json",
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
@@ -107,7 +118,11 @@ class TestCheckOutCreate:
             asset = make_asset(tag=f"AST-207-{i}")
             resp = auth_client.post(
                 "/api/v1/checkouts/",
-                {"asset_tag": asset.asset_tag, "employee_code": employee.employee_code, "due_at": due_at()},
+                {
+                    "asset_tag": asset.asset_tag,
+                    "employee_code": employee.employee_code,
+                    "due_at": due_at(),
+                },
                 format="json",
             )
             assert resp.status_code == status.HTTP_201_CREATED
@@ -115,14 +130,20 @@ class TestCheckOutCreate:
         fourth_asset = make_asset(tag="AST-207-x")
         resp = auth_client.post(
             "/api/v1/checkouts/",
-            {"asset_tag": fourth_asset.asset_tag, "employee_code": employee.employee_code, "due_at": due_at()},
+            {
+                "asset_tag": fourth_asset.asset_tag,
+                "employee_code": employee.employee_code,
+                "due_at": due_at(),
+            },
             format="json",
         )
         assert resp.status_code == status.HTTP_409_CONFLICT
 
 
 class TestCheckOutReturn:
-    def test_return_sets_asset_available(self, auth_client, make_asset, make_employee, make_checkout):
+    def test_return_sets_asset_available(
+        self, auth_client, make_asset, make_employee, make_checkout
+    ):
         asset = make_asset(tag="AST-210", status=Asset.Status.CHECKED_OUT)
         employee = make_employee(code="EMP-210")
         checkout = make_checkout(asset, employee)
@@ -136,7 +157,9 @@ class TestCheckOutReturn:
         asset.refresh_from_db()
         assert asset.status == Asset.Status.AVAILABLE
 
-    def test_return_with_maintenance_flag(self, auth_client, make_asset, make_employee, make_checkout):
+    def test_return_with_maintenance_flag(
+        self, auth_client, make_asset, make_employee, make_checkout
+    ):
         asset = make_asset(tag="AST-211", status=Asset.Status.CHECKED_OUT)
         employee = make_employee(code="EMP-211")
         checkout = make_checkout(asset, employee)

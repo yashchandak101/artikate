@@ -1,6 +1,6 @@
-import pytest
 from datetime import timedelta
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.utils import timezone
@@ -51,7 +51,7 @@ class TestThrottling:
 class TestJWTAuth:
     def test_obtain_and_use_jwt_access_token(self, db, make_asset):
         make_asset(tag="AST-910")
-        user = get_user_model().objects.create_user(username="jwtuser", password="pw12345")
+        get_user_model().objects.create_user(username="jwtuser", password="pw12345")
 
         client = APIClient()
         token_resp = client.post(

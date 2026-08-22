@@ -1,8 +1,8 @@
 from datetime import timedelta
 
 import pytest
-from django.test.utils import CaptureQueriesContext
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from rest_framework import status
 
@@ -57,7 +57,9 @@ class TestOverdueReport:
         for i in range(10):
             employee = make_employee(code=f"EMP-40{i}")
             asset = make_asset(tag=f"AST-4{i}0", status=Asset.Status.CHECKED_OUT)
-            c = CheckOut.objects.create(asset=asset, employee=employee, due_at=now - timedelta(days=1))
+            c = CheckOut.objects.create(
+                asset=asset, employee=employee, due_at=now - timedelta(days=1)
+            )
             CheckOut.objects.filter(pk=c.pk).update(checked_out_at=now - timedelta(days=5))
 
         with CaptureQueriesContext(connection) as ctx:

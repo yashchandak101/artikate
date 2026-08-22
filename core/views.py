@@ -168,9 +168,7 @@ class EmployeeSummaryView(APIView):
         aggregates = CheckOut.objects.filter(employee=employee).aggregate(
             lifetime_checkout_count=Count("id"),
             currently_held_count=Count("id", filter=Q(returned_at__isnull=True)),
-            currently_overdue_count=Count(
-                "id", filter=Q(returned_at__isnull=True, due_at__lt=now)
-            ),
+            currently_overdue_count=Count("id", filter=Q(returned_at__isnull=True, due_at__lt=now)),
             mean_hold_duration=Avg(hold_duration, filter=Q(returned_at__isnull=False)),
         )
 
@@ -234,4 +232,6 @@ class HealthView(APIView):
         body = {"status": "ok" if db_ok else "error", "database": db_ok}
         if db_error:
             body["database_error"] = db_error
-        return Response(body, status=status.HTTP_200_OK if db_ok else status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(
+            body, status=status.HTTP_200_OK if db_ok else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
