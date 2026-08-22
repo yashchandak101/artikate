@@ -1,0 +1,127 @@
+name: CI
+
+# Runs on every PR into main, and on every push to main (so main itself is
+# never in a state that hasn't been through this pipeline).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff, black, isort)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: ruff
+        run: ruff check .
+
+      - name: black --check
+        run: black --check .
+
+      - name: isort --check
+        run: isort --check .
+
+  test:
+    name: Test (pytest against real Postgres + Redis)
+    runs-on: ubuntu-latest
+
+    # Real service containers, not sqlite — this is what actually lets the
+    # concurrency test (SELECT ... FOR UPDATE) mean something. See
+    # ANSWERS.md Part D3 / README "Verified end-to-end".
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: artikate
+          POSTGRES_USER: artikate
+          POSTGRES_PASSWORD: artikate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U artikate"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: "*"
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: artikate
+      POSTGRES_USER: artikate
+      POSTGRES_PASSWORD: artikate
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Fail if migrations are missing
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+
+      - name: Run test suite
+        run: python -m pytest core/tests -v
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build-only, no push — this job exists purely to catch Dockerfile
+      # drift (a broken image is just as much a shipping blocker as a
+      # failing test, and it's easy for the Dockerfile to silently rot
+      # once everyone's local workflow stops touching it directly).
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: artikate-checkout:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
