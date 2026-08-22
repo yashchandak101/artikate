@@ -5,6 +5,7 @@ from django.db import connection, transaction
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -21,6 +22,8 @@ from .serializers import (
     CheckOutReturnSerializer,
     CheckOutSerializer,
     EmployeeSummarySerializer,
+    HealthSerializer,
+    OverdueReportResponseSerializer,
     OverdueReportRowSerializer,
 )
 
@@ -157,6 +160,7 @@ class CheckOutViewSet(
 
 
 class EmployeeSummaryView(APIView):
+    @extend_schema(responses=EmployeeSummarySerializer)
     def get(self, request, employee_code):
         employee = get_object_or_404(Employee, employee_code=employee_code)
         now = timezone.now()
@@ -188,6 +192,7 @@ class EmployeeSummaryView(APIView):
 
 
 class OverdueReportView(APIView):
+    @extend_schema(responses=OverdueReportResponseSerializer)
     def get(self, request):
         now = timezone.now()
         # select_related pulls asset + employee columns in the same query
@@ -218,6 +223,7 @@ class HealthView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    @extend_schema(responses=HealthSerializer)
     def get(self, request):
         db_ok = True
         db_error = None

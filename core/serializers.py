@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from .models import Asset, CheckOut, Employee
@@ -30,6 +31,7 @@ class AssetDetailSerializer(AssetSerializer):
     class Meta(AssetSerializer.Meta):
         fields = AssetSerializer.Meta.fields + ["current_holder"]
 
+    @extend_schema_field(CurrentHolderSerializer(allow_null=True))
     def get_current_holder(self, obj):
         # obj.status is checked first to avoid an extra query for the
         # common "available" case.
@@ -101,3 +103,14 @@ class OverdueReportRowSerializer(serializers.Serializer):
     employee_name = serializers.CharField()
     due_at = serializers.DateTimeField()
     days_overdue = serializers.IntegerField()
+
+
+class OverdueReportResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = OverdueReportRowSerializer(many=True)
+
+
+class HealthSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    database = serializers.BooleanField()
+    database_error = serializers.CharField(required=False)
